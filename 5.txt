@@ -1,0 +1,72 @@
+What is Clustering?
+A Microsoft SQL Server Cluster is nothing more than a collection of two or more physical servers with identical access to shared storage that provides the disk resources required to store the database files. 
+
+These servers are referred to as "nodes".  Each of the nodes talk to one another via a private network, sending a heartbeat signal between them.  Should one node not communicate its heartbeat to the other node in the cluster the secondary node will take ownership of any dependent services being run by the node that lost communication.  This process is referred to as "failover".
+
+A failover can occur both automatically (a server's heartbeat stops communicating) or manually.  A manual failover is beneficial in the event that patching or some other form of maintenance is required at the physical server level.  You would typically implement clustering in order to ensure that if you ever encounter hardware failure on the physical server hosting your SQL instance, your databases would continue to be available for dependent applications and their users. 
+
+Unlike other clustering technologies that are implemented for better performance or for increased processing power via load-balancing, SQL clusters are designed for providing highly-available databases; eliminating downtime associated with hardware failure.  This architectural concept is referred to as "High Availability Clustering" or "HA Clustering" for short.  The service or groups of services that are hosted on a clustered node are respectively referred to as resources and resource groups.  Since these resources must be available to all nodes in a cluster then they must reside on a shared disk array in the form of SAN-NAS disk.  Each resource group will be mapped to a logical drive that is physically hosted on the shared disk array and will also have it's own associated IP address and network name. 
+
+The SQL Server Installation Process on a Cluster
+The SQL Server installation process detects when an installation is being attempted on a clustered node and will prompt you as to whether you wish to configure the SQL instance as clustered or not.  If you proceed with creating a clustered instance of SQL Server, the instance will be hosted on a "Virtual" Server.  Resources such as data and log files will be created on the shared SAN-NAS disk for SQL Server, SQL Server Agent, and Full-Text Indexing.
+
+If selected in the installation process, Notification Services and Analysis Services are also cluster-aware in SQL Server 2005.  Conversely, the associated program files for the instance will be installed on the local drives of each of the clustered nodes in an identical fashion and registry values are set identically across all clustered nodes.  Since the "Virtual" server resides solely on the SAN it can be "owned" by any of the nodes you allow.  Each of the nodes can run these resources in identical fashion because each physical server/node has the program files and identical registry settings necessary to run the SQL instance. 
+
+
+
+Furthermore, the users are oblivious to the underlying fluidity of the server.  They connect to it as they would any other physical server:  by server name (virtual server name in this case) if the default instance or by virtual server name\instance name if a named instance.  This is key for application connectivity.  Since the SQL instance simply changes ownership during a failover, connection strings the applications rely on to connect to their databases need not be recoded; the physical server may become unavailable, but the virtual server persists after the failover.
+
+Active/Active or Active/Passive Clustering
+Clusters are often referred to as either Active/Active or Active/Passive.  Just as you would expect by the name, in an Active/Active cluster there will be two or more nodes, each one owning an instance of Microsoft SQL Server.  If one node fails, the instance it owns would fail over to the other node, running along side (and contending for resources with) the other instance.  An Active/Passive architecture  requires that no matter how many nodes make up the cluster, at least one node is not the owner of an instance of SQL Server.  It is "passive" and only exists to accept a failover of a node hosting a SQL instance in the event of a failover. 
+
+Current Microsoft licensing policies require you to only license the active nodes running Microsoft SQL Server.  The passive node need not be licensed.
+
+How Many Nodes?
+Today's clustering technology under Windows 2003 and Microsoft SQL Server 2005 Enterprise Edition allows for up to eight nodes to be combined into a single cluster.  The release of Windows 2008 and Microsoft SQL Server 2008 Enterprise Edition will bring with it the ability to double that to sixteen nodes.  (You are limited to two nodes if you utilize SQL Server Standard Edition.)  Do you want to cluster multiple databases of various SLAs within many nodes on a single cluster?  Is it beneficial to dedicate a two-node cluster to a single database?  The answer is:  "It Depends."  We look into this in detail in a future tip.
+
+Pros and Cons
+While clustering protects you from hardware failure relating to the server hosting the SQL Server instance, it does not protect you from media failure.  Unlike replication, database mirroring, or log shipping there is only a single copy of your database.  If the SAN-NAS encounters a failure then you could not only conceivably incur downtime, but possibly data loss.  It is recommended that you incorporate redundancy of your SAN-NAS or database mirroring with your clustering configuration to protect you from media failures.  Hardware and licensing costs may be high.  In an Active/Passive clustering model you'll purchase hardware you hope to never need to use.  The cluster build is more complex than a standalone server setup.  The physical build of the cluster is outside the scope of this discussion however.  Additional benefits for clustering include simplicity for installation of SQL and ease of administration and maintenance.
+
+
+----------------------------------------------------
+SQL Cluster Installation
+--------------------------------------------------
+SQL Setup mainly uses the SQLCluster.DLL from its BINN Directory to execute the following functions in it: DoSQLClusterSetUpWork
+DoUnClusterSetup
+CheckDatabasesForInstance
+
+The explanation of each function is given below:
+
+DoSQLClusterSetUpWork:This function is defined in the SQLCluster.dll module. It enables users to install the new SQL Instance in the cluster. Using this function, the setup performs a couple of tasks including gathering the list of nodes, list of disks, list of network interfaces etc. If you add any new disks to the cluster while the SQL Server setup is running, the disk will not be recognized by the SQL setup process unless you exit the setup and start it again from scratch. This is because the DoSQLClusterSetUpWork function executed from SQLCluster.dll gathers the cluster configuration information before it comes to select the disks or nodes available in the SQL Setup.
+
+DoUnClusterSetup:This function's job is to prepare your setup to uninstall the SQL Instance from the cluster.
+
+CheckDatabasesForInstance:The responsibility of the last function in SQLCluster.DLL is to make sure no instances of the same name are available in the cluster. This function is useful when running SQL Setup in a cluster environment or in a stand-alone environment. You cannot install two duplicate instances of the SQL. This function makes sure there is no duplicate SQL Instance in the cluster. When you run SQL Setup, the function checks the available SQL Instances, and based on that it will make sure the user-supplied instance is not already created in the SQL cluster.
+
+How Does SQL Server Cluster Setup Configure a Second Node to Be Cluster-Aware?
+A second node is generally a passive node on which SQL Setup, when installing SQL database instance in a cluster environment, will make it cluster-aware. We will explain this in detail. The process is very tricky for SQL Server setup when configuring a second node to be cluster-aware in a SQL Cluster. The setup performs several steps that are internal to SQL Setup. The On-Screen setup doesn't really tell what setup is actually doing in the background. These are logged in the SQL Setup log files. We will limit our discussion and will not discuss anything about the Setup Log files here.
+
+The next part of this article series will explain SQL Setup log files.
+
+For an SQL Node to be cluster-aware, SQL Setup must perform the following steps to ensure nodes in the cluster will be operable after installation. The Setup makes sure:
+
+The binary files have been installed and copied, and their modules are not registered with the system.
+The necessary registry entries have been created.
+The necessary SQL Cluster Modules have been copied.
+The necessary SQL Cluster Resource Types have been created and registered with clustering software.
+The SQL Service instances have been created in the registry.
+The necessary client registry entries have been created.
+
+
+--------------------------------------------------
+SQL Cluster Troubleshooting 
+-------------------------------------------
+Troubleshooting Tip:If you have a problem starting up your SQL Cluster or SQL can't read the binary files, then you must check the above registry location to make sure the registry entry is pointing to the correct location in which the SQL binaries exist.
+
+Troubleshooting Tip:If your client computers are unable to access SQL Instance in a cluster, always make sure the above registry entries are created in the Active Node of the cluster where the SQL Instance is currently running.
+
+-----------------------------------------------------
+SQL Cluster Maintenanace
+-------------------------------------------
+https://docs.microsoft.com/en-us/sql/sql-server/failover-clusters/windows/failover-cluster-instance-administration-and-maintenance?view=sql-server-ver15
+
