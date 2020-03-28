@@ -1,0 +1,48 @@
+SAR command in Linux to monitor system performance
+sar : System Activity Report
+
+It can be used to monitor Linux system’s resources like CPU usage, Memory utilization, I/O devices consumption, Network monitoring, Disk usage, process and thread allocation, battery performance, Plug and play devices, Processor performance, file system and more.Linux system Monitoring and analyzing aids understanding system resource usage which can help to improve system performance to handle more requests.
+
+By default SAR command displays result on the output screen, in addition result can also be stored in the file specified by the -o filename option.
+Any user can collect information about system performance using system activities flags. The SAR command will show only CPU monitoring activity if any flag is not specifies by user.
+
+To verify the sar version :
+hduser@mahesh-Inspiron-3543:~$ sar -V
+
+https://www.geeksforgeeks.org/sar-command-linux-monitor-system-performance/
+
+-------------------
+vmstat
+-------------------
+
+vmstat reports information about processes, memory, paging, block IO, traps, and cpu activity.
+The first report produced gives averages since the last reboot. Additional reports give information on a sampling period of length delay. The process and memory reports are instantaneous in either case.
+
+Options
+The -a switch displays active/inactive memory, given a 2.5.41 kernel or better.
+The -f switch displays the number of forks since boot. This includes the fork, vfork, and clone system calls, and is equivalent to the total number of tasks created. Each process is represented by one or more tasks, depending on thread usage. This display does not repeat.
+
+The -m displays slabinfo.
+
+The -n switch causes the header to be displayed only once rather than periodically.
+
+The -s switch displays a table of various event counters and memory statistics. This display does not repeat.
+
+delay is the delay between updates in seconds. If no delay is specified, only one report is printed with the average values since boot.
+
+count is the number of updates. If no count is specified and delay is defined, count defaults to infinity.
+
+The -d reports disk statistics (2.5.70 or above required)
+
+The -p followed by some partition name for detailed statistics (2.5.70 or above required)
+
+The -S followed by k or K or m or M switches outputs between 1000, 1024, 1000000, or 1048576 bytes
+
+The -V switch results in displaying version information.
+
+
+https://www.computerhope.com/unix/vmstat.htm
+
+https://www.tutorialspoint.com/unix_commands/vmstat.htm
+
+https://www.geeksforgeeks.org/vmstat-command-in-linux-with-examples/
