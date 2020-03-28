@@ -1,0 +1,221 @@
+https://github.com/sandipmohapatra/FinalMPhasis
+
+1 What is Query Performance?
+Answer: There are generally two measures of query performance:
+
+response time, the time to get an answer to an individual query, and
+
+throughput, the number of queries that can be run in any time period; for example, queries per second).
+
+These two are related, but are not the same. In a heavily loaded system, you normally want maximum throughput, whereas in a relatively lightly loaded system, you probably want minimum response time. Also, some applications require a query to deliver all its hits to the user, whereas others might only require the first 20 hits from an ordered set. It is important to distinguish between these two scenarios.
+
+
+2 How does the size of my data affect queries?
+Answer: The speed at which the text index can deliver ROWIDs is not affected by the actual size of the data. Text query speed will be related to the number of rows that must be fetched from the index table, number of hits requested, number of hits produced by the query, and the presence or absence of sorting.
+
+3 How does the format of my data affect queries?
+Answer: The format of the documents (plain ascii text, HTML or Microsoft Word) should make no difference to query speed. The documents are filtered to plain text at indexing time, not query time.
+
+The cleanliness of the data will make a difference. Spell-checked and sub-edited text for publication tends to have a much smaller total vocabulary (and therefore size of the index table) than informal text such as emails, which will contain many spelling errors and abbreviations. For a given index memory setting, the extra text takes up more memory, which can lead to more fragmented rows than in the cleaner text, which can adversely affect query response time.
+
+4 What is a functional versus an indexed lookup?
+Answer: There are two ways the kernel can query the text index. In the first and most common case, the kernel asks the text index for all the rowids that satisfy a particular text search. These rowids are returned in batches. In the second, the kernel passes individual rowids to the text index, and asks whether that particular rowid satisfies a certain text criterion.
+
+The second is known as a functional lookup, and is most commonly done where there is a very selective structured clause, so that only a few rowids must be checked against the text index. An example of a search where a functional lookup may be used:
+
+SELECT ID, SCORE(1), TEXT FROM MYTABLE
+WHERE START_DATE = '21 Oct 1992'         <- highly selective
+AND CONTAINS (TEXT, 'commonword') > 0    <- unselective
+
+Functional invocation is also used for text query ordered by structured column (for example date, price) and text query is unselective.
+
+
+5 Does sorting the results slow a text-only query?
+Answer: Yes, it certainly does.
+
+If there is no sorting, then Oracle Text can return results as it finds them, which is quicker in the common case where the application needs to display only a page of results at a time.
+
+6 How do I make a ORDER BY score query faster?
+Answer: Sorting by relevance (SCORE(n)) can be extremely quick if the FIRST_ROWS(n) hint is used. In this case, Oracle Text performs a high speed internal sort when fetching from the text index tables.
+
+An example of such a query:
+
+SELECT /*+ FIRST_ROWS(10) */ ID, SCORE(1), TEXT FROM MYTABLE
+                WHERE CONTAINS (TEXT, 'searchterm', 1) > 0
+                ORDER BY SCORE(1) DESC;
+
+Note that for this to work efficiently, there must be no other criteria in the WHERE clause other than a single CONTAINS.
+
+7 Which Memory Settings Affect Querying?
+Answer: For querying, you want to strive for a large system global area (SGA). You can set these parameters related to SGA in your Oracle Database initialization file. You can also set these parameters dynamically.
+
+The SORT_AREA_SIZE parameter controls the memory available for sorting for ORDER BY queries. You should increase the size of this parameter if you frequently order by structured columns.
+
+8 Does out of line LOB storage of wide base table columns improve performance?
+Answer: Yes. Typically, a SELECT statement selects more than one column from your base table. Since Oracle Text fetches columns to memory, it is more efficient to store wide base table columns such as LOBs out of line, especially when these columns are rarely updated but frequently selected.
+
+When LOBs are stored out of line, only the LOB locators need to be fetched to memory during querying. Out of line storage reduces the effective size of the base table making it easier for Oracle Text to cache the entire table to memory. This reduces the cost of selecting columns from the base table, and hence speeds up text queries.
+
+In addition, having smaller base tables cached in memory enables more index table data to be cached during querying, which improves performance.
+
+9 How can I make a CONTAINS query on more than one column faster?
+Answer: The fastest type of query is one where there is only a single CONTAINS clause, and no other conditions in the WHERE clause.
+
+Consider the following multiple CONTAINS query:
+
+SELECT title, isbn FROM booklist
+                WHERE CONTAINS (title, 'horse') > 0
+                  AND CONTAINS (abstract, 'racing') > 0
+
+We can obtain the same result with section searching and the WITHIN operator as follows:
+
+SELECT title, isbn FROM booklist
+                WHERE CONTAINS (alltext, 
+                  'horse WITHIN title AND racing WITHIN abstract')>0
+
+This will be a much faster query. In order to use a query like this, we must copy all the data into a single text column for indexing, with section tags around each column's data. This can be done with PL/SQL procedures before indexing, or by making use of the USER_DATASTORE datastore during indexing to synthesize structured columns with the text column into one document.
+
+11 How can local partition indexes help?
+Answer: You can create local partitioned CONTEXT indexes on partitioned tables. This means that on a partitioned table, each partition has its own set of index tables. Effectively, there are multiple indexes, but the results from each are combined as necessary to produce the final result set.
+
+The index is created using the LOCAL keyword:
+
+CREATE INDEX index_name ON table_name (column_name) 
+INDEXTYPE IS ctxsys.context
+PARAMETERS ('...')
+LOCAL
+
+With partitioned tables and local indexes, you can improve performance of the following types of CONTAINS queries:
+
+Range Search on Partition Key Column
+
+This is a query that restricts the search to a particular range of values on a column that is also the partition key.
+
+ORDER BY Partition Key Column
+
+This is a query that requires only the first N hits and the ORDER BY clause names the partition key
+
+12 Should I query in parallel?
+Answer: Depends. Even though parallel querying is the default behavior for indexes created in parallel, it usually results in degrading overall query throughput on heavily loaded systems.
+
+In general, parallel queries are good for DSS or analytical systems with large data collections, multiple CPUs, and low number of concurrent users.
+
+13 Should I index themes?
+Answer: Indexing theme information with a CONTEXT index takes longer and also increases the size of your index. However, theme indexes enable ABOUT queries to be more precise by using the knowledge base, if available. If your application uses ABOUT queries heavily, it might be worthwhile to create a theme component to the index, despite the extra indexing time and extra storage space required.
+
+14 When should I use a CTXCAT index?
+Answer: CTXCAT indexes work best when text is in small chunks, maybe a few lines maximum, and searches need to restrict or sort the result set according to certain structured criteria, usually numbers or dates.
+
+For example, consider an on-line auction site. Each item for sale has a short description, a current bid price, and dates for the start and end of the auction. A user might want to see all the records with antique cabinet in the description, with a current bid price less than $500. Since he's particularly interested in newly posted items, he wants the results sorted by auction start time.
+
+Such a search is not always efficient with a CONTAINS structured query on a CONTEXT index, where the response time can vary significantly depending on the structured and CONTAINS clauses. This is because the intersection of structured and CONTAINS clauses or the ordering of text query is computed during query time.
+
+By including structured information such as price and date within the CTXCAT index, query response time is always in an optimal range regardless of search criteria. This is because the interaction between text and structured query is pre-computed during indexing. Consequently query response time is optimum.
+
+15 When is a CTXCAT index NOT suitable?
+Answer: There are differences in the time and space needed to create the index. CTXCAT indexes take a bit longer to create and use considerably more disk space than CONTEXT indexes. If you are tight on disk space, you should consider carefully whether CTXCAT indexes are appropriate for you.
+
+With respect to query operators, you can now use the richer CONTEXT grammar in CATSEARCH queries with query templates. The older restriction of a single CATSEARCH query grammar no longer holds.
+
+16 What optimizer hints are available, and what do they do?
+Answer: The optimizer hint INDEX(table column) can be used in the usual way to drive the query with a text or b-tree index.
+
+You can also use the NO_INDEX(table column) hint to disable a specific index.
+
+Additionally, the FIRST_ROWS(n) hint has a special meaning for text queries and should be used when you need the first n hits to a query. Use of the FIRST_ROWS hint in conjunction with ORDER BY SCORE(n) DESC tells Oracle Text to accept a sorted set from the text index, and not to do a further sort.
+
+
+17 How long should indexing take?
+Answer: Indexing text is a resource-intensive process. Obviously, the speed of indexing will depend on the power of the hardware involved.
+
+As a benchmark, with an average document size of 5K, Oracle Text can index approximately 200 documents per second with the following hardware and parallel configuration:
+
+4x400Mhz Sun Sparc CPUs
+
+4 gig of RAM
+
+EMC symmetrix (24 disks striped)
+
+Parallel degree of 5 with 5 partitions
+
+Index memory of 600MB per index process
+
+XML news documents that averaged 5K in size
+
+USER_DATASTORE
+
+Other factors such as your document format, location of your data, and the calls to user-defined datastores, filters, and lexers can have an impact on your indexing speed.
+
+18 Which index memory settings should I use?
+Answer: You can set your index memory with the system parameters DEFAULT_INDEX_MEMORY and MAX_INDEX_MEMORY. You can also set your index memory at run time with the CREATE INDEX memory parameter in the parameter string.
+
+You should aim to set the DEFAULT_INDEX_MEMORY value as high as possible, without causing paging.
+
+You can also improve Indexing performance by increasing the SORT_AREA_SIZE system parameter.
+
+Experience has shown that using a large index memory setting, even into hundreds of megabytes, will improve the speed of indexing and reduce the fragmentation of the final indexes. However, if set too high, then the memory paging that occurs will cripple indexing speed.
+
+With parallel indexing, each stream requires its own index memory. When dealing with very large tables, you can tune your database system global area (SGA) differently for indexing and retrieval. For querying, you are hoping to get as much information cached in the system global area's (SGA) block buffer cache as possible. So you should be allocating a large amount of memory to the block buffer cache. But this will not make any difference to indexing, so you would be better off reducing the size of the SGA to make more room for a large index memory settings during indexing.
+
+You set the size of SGA in your Oracle Database initialization file.
+
+19 How much disk overhead will indexing require?
+Answer: The overhead, the amount of space needed for the index tables, varies between about 50% of the original text volume and 200%. Generally, the larger the total amount of text, the smaller the overhead, but many small records will use more overhead than fewer large records. Also, clean data (such as published text) will require less overhead than dirty data such as emails or discussion notes, since the dirty data is likely to include many unique words from mis-spellings and abbreviations.
+
+A text-only index is smaller than a combined text and theme index. A prefix and substring index makes the index significantly larger.
+
+20 How does the format of my data affect indexing?
+Answer: You can expect much lower storage overhead for formatted documents such as Microsoft Word files since such documents tend to be very large compared to the actual text held in them. So 1GB of Word documents might only require 50MB of index space, whereas 1GB of plain text might require 500MB, since there is ten times as much plain text in the latter set.
+
+Indexing time is less clear-cut. Although the reduction in the amount of text to be indexed will have an obvious effect, you must balance this out against the cost of filtering the documents with the INSO filter or other user-defined filters.
+
+21 Can parallel indexing improve performance?
+Answer: Parallel indexing can improve index performance when you have a large amount of data, and have multiple CPUs.
+
+You use the PARALLEL keyword when creating the index:
+
+CREATE INDEX index_name ON table_name (column_name) 
+INDEXTYPE IS ctxsys.context PARAMETERS ('...') PARALLEL 3;
+
+This will create the index with up to three separate indexing processes depending on your resources.
+
+Parallel indexing can also be used to create local partitioned indexes on partitioned tables. However, indexing performance only improves when you have multiple CPUs.
+22 How can I improve index performance for creating local partitioned index?
+Answer: When you have multiple CPUs, you can improve indexing performance by creating a local index in parallel. There are two ways to index in parallel:
+
+You can create a local partitioned index in parallel in two ways:
+
+Use the PARALLEL clause with the LOCAL clause in CREATE INDEX.In this case, the maximum parallel degree is limited to the number of partitions you have.
+
+Create an unusable index first, then run the DBMS_PCLXUTIL.BUILD_PART_INDEX utility. This method can result in a higher degree of parallelism, especially if you have more CPUs than partitions.
+
+The following is an example for the second method. In this example, the base table has three partitions. We create a local partitioned unusable index first, the run the DBMS_PCLUTIL.BUILD_PART_INDEX, which builds the 3 partitions in parallel (inter-partition parallelism). Also inside each partition, index creation is done in parallel (intra-partition parallelism) with a parallel degree of 2.
+
+create index tdrbip02bx on tdrbip02b(text) 
+indextype is ctxsys.context local (partition tdrbip02bx1, 
+                                   partition tdrbip02bx2, 
+                                   partition tdrbip02bx3) 
+unusable; 
+
+exec dbms_pclxutil.build_part_index(3,2,'TDRBIP02B','TDRBIP02BX',TRUE); 
+23 How can I tell how much indexing has completed?
+Answer: You can use the CTX_OUTPUT.START_LOG procedure to log output from the indexing process. Filename will normally be written to $ORACLE_HOME/ctx/log, but you can change the directory using the LOG_DIRECTORY parameter in CTX_ADM.SET_PARAMETER.
+
+
+
+
+24 How often should I index new or updated records?
+Answer: The less often you run reindexing with CTX_DLL.SYNC_INDEX, the less fragmented your indexes will be, and the less you will need to optimize them.
+
+However, this means that your data will become progressively more out of date, which may be unacceptable for your users.
+
+Many systems are OK with overnight indexing. This means data that is less than a day old is not searchable. Other systems use hourly, ten minute, or five minute updates.
+
+25 How can I tell when my indexes are getting fragmented?
+Answer: The best way is to time some queries, run index optimization, then time the same queries (restarting the database to clear the SGA each time, of course). If the queries speed up significantly, then optimization was worthwhile. If they don't, you can wait longer next time.
+
+You can also use CTX_REPORT.INDEX_STATS to analyze index fragmentation.
+
+26 Does memory allocation affect index synchronization?
+Answer: Yes, the same way as for normal indexing. But of course, there are often far fewer records to be indexed during a synchronize operation, so it is not usually necessary to provide hundreds of megabytes of indexing memory.
+
