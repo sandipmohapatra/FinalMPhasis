@@ -1,0 +1,74 @@
+Java heap related issues can cause severe damage to your application that will directly result in poor end user experience. Care must be taken to tune the Heap related parameters that suit your application. Out of the box default parameters are not enough.
+
+Quick overview:
+
+Java Heap is the memory used by your application to create and store objects. You define the maximum memory that can be for the Heap by specifying ‘-Xmx<size>’ java command line option (Example: ‘-Xmx1024m‘, where m stands for Mega bytes). As your application runs, it will gradually fill up Heap. JVM periodically runs a process called ‘Garbage collection’ (GC) which will scan the heap and clear objects that are no longer referenced by your application.One cannot request Garbage Collection on demand. Only JVM can decide when to run GC.
+
+Most common Java Heap related issues and how to fix them.
+
+
+1. ‘OutOfMemory’ Error due to insufficient Heap
+
+This is when JVM runs out of Heap and GC is unable to reclaim memory to meet the demand of the application. This error simply means that the Heap is filled with objects that are being used/referenced by your application.
+
+It is possible that you indeed are using all the objects i.e there is real demand for memory. For example, if you are doing heavy weight activities like processing images/video or crunching big numbers.
+
+How to identify ?
+
+When you plot the heap usage graph, you will most probably see a sudden spike in memory utilization, indicating a heavy weight transaction has just started. This will be in contrast to a ‘gradual increase in heap.
+
+How to fix ?
+
+You could try increasing the Heap size to see if you can live through the heavy weight transaction. Sometimes this is enough. But some times, the code needs to be revisited to see why the demand is high in first place. May be you are trying to pull millions of records from DB and process them at once. May be you are processing something unnecessarily.
+
+2. Poor application response time due to long Garbage Collection Pauses
+
+As mentioned earlier GC is responsible for scanning the heap and clearing unused objects so that the memory can be reclaimed. This can be a resource intensive process especially when the heap is big and it is filled to the brink. In most cases, when GC is running, the entire JVM is paused. When GC takes a long time to complete the JVM pause time also becomes long resulting in very poor end user experience. Ideally each GC pause should be less than 500ms depending upon how often the GC runs.
+
+How to identify ?
+
+When you plot the graph for GC Time , you will see longer duration (several seconds). You will also hear from your customers about poor performance. In some cases, the CPU utilization of the Server can go up significantly as well.
+
+How to fix ?
+
+Tuning can help. Make sure you have ‘generational’ heap configured. With generational heap, the heap has a special area called ‘nursery’ or ‘new generation’ that is used for short lived objects. 
+
+3. OutofMemory Error due to Memory leak
+
+Memory leak means the application is allocating memory and holding on to them unnecessarily,after certain period, the heap will be filled with objects are being used by the application and GC will NOT be able to reclaim those. This results in the ‘OutOfMemory’ error.
+
+How to identify ?
+
+When you plot the heap graph, you would see a ‘staircase’ pattern, indicating a gradual leak (rather than a sudden spike). You will also face ‘OutOfMemory’ errors
+
+How to fix it?
+
+Memory leak is most probably code issue. This can also happen due to a library you are using that is outside of your code. Profiling your application using tools like Jprobe will shed light.
+
+4. Heap fragmentation
+
+Heap gets fragmented when small and large objects are allocated in a mixed fashion that have various lifetimes. To some extent, you cannot avoid fragmentation – over time, heap will get fragmented. But there is couple of crucial things to consider.
+
+a. When heap is fragmented, GC will try to compact the heap which can result in a longer GC pause time for a heavily fragmented heap
+
+b. Heap fragmentation becomes an issue ONLY when your application requires to allocate memory for a large object (which will need contiguous blocks of memory).
+
+How to identify ?
+
+You will see poor application response times, longer GC pauses and in some case ‘OutOfMemory’ errors.
+
+How to fix?
+
+Tuning can help. This is when tuning becomes extremely vendor specific (HP,IBM,Hotspot etc). You will have to check your JVM’s options . Also note that newer versions of JVMs are much efficient in handling the fragmentation as they dynamically compact the heap. So, you may never really run into this issue if you use newer releases of your JVM.
+
+Now, How to monitor heap and GC ?
+
+There are several options:
+
+1. Use -verbose:gc to get verbose GC logs. It can be life saver. There are tools to analyze the verbose GC logs
+
+2. Use JDK tools such as jconsole,visualvm and jstat.
+
+3. Procure a commercial APM (Application Performance Management) tool that will not only monitor the heap but can alert you when things are about to get bad. APM can also help in identifying memory leaks.
+ 
+
